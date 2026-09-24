@@ -32,6 +32,14 @@ test('what does not print a secret is left alone — templates, setup, writes, k
   assert.equal(judge({ tool_name: 'Edit', tool_input: { file_path: '/p/.env' } }), null, 'only reading is guarded');
 });
 
+test('code is not a file, and a heredoc written to a file is data — but one fed to an interpreter is run', () => {
+  // It refused its own author on its first live day for this:
+  assert.equal(bash("python3 - <<'EOF'\nimport os\nx = 'headless = (env = process.env) => 1'\nEOF"), null, 'process.env is code');
+  assert.equal(bash('node -e "console.log(process.env.HOME)"'), null);
+  assert.equal(bash("cat >> test/guard.test.js <<'EOF'\nassert.ok(bash('cat .env'))\nEOF"), null, 'a test ABOUT .env, being written, reads nothing');
+  assert.ok(bash("python3 <<'EOF'\nprint(open('.env').read())\nEOF"), 'a heredoc run by an interpreter that opens .env is a read');
+});
+
 test('the hook speaks Claude Code: JSON on stdin, a decision on stdout, silence when allowed', () => {
   let r = spawnSync(process.execPath, [CLI, 'guard'], { input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'cat .env' } }), encoding: 'utf8' });
   assert.equal(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision, 'deny');

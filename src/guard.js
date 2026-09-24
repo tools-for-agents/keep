@@ -19,16 +19,28 @@ const SECRET_FILE = /(^|[\s/'"=<(@])((?:[\w.-]*\/)*(?:\.env(?:\.[\w-]+)?|[\w.-]+
 const TEMPLATE = /\.(?:example|sample|template|dist|defaults?)$|\.example\./i;
 const READERS = /(^|[\s;&|(`$])(cat|bat|less|more|head|tail|grep|egrep|fgrep|rg|ag|sed|awk|cut|sort|uniq|strings|xxd|hexdump|od|base64|openssl|jq|yq|nl|tac|paste|diff|cmp|column|tr|python3?|node|ruby|perl|curl|nc)(?=\s)/;
 
+// `process.env`, `import.meta.env` are code, not files — and they are in every JS command an agent
+// writes. The guard refused its own author on the first live day for `(env = process.env)`.
+const CODE_NOT_FILE = /(^|\/)(?:process|import\.meta|os|self|window|globalThis|config|app|settings)\.env$/;
+
 function secretIn(text) {
   const out = [];
   const re = new RegExp(SECRET_FILE.source, 'g');
   let m;
   while ((m = re.exec(String(text)))) {
     const f = m[2];
-    if (!TEMPLATE.test(f)) out.push(f);
+    if (!TEMPLATE.test(f) && !CODE_NOT_FILE.test(f)) out.push(f);
   }
   return out;
 }
+
+// A heredoc's BODY is data being written somewhere (a test, a script, a doc), not a command being
+// run: `cat > test.js <<'EOF' … 'cat .env' … EOF` writes a test ABOUT .env and reads nothing. Only
+// the command line around it is judged.
+// But a heredoc fed to an INTERPRETER (`python3 <<EOF … open('.env') … EOF`) is code being run, and
+// it stays: only a body headed for a file (`cat > f <<EOF`, `tee f <<EOF`) is skipped.
+export const withoutHeredocs = (cmd) => String(cmd).replace(/([^\n]*?)<<-?\s*(['"]?)(\w+)\2([^\n]*)\n[\s\S]*?\n\s*\3\s*(?=\n|$)/g,
+  (whole, before, _q, _tag, after) => (/\b(cat|tee)\b[^|;&]*>|\btee\b/.test(`${before} ${after}`) ? `${before} ${after}` : whole));
 
 export function judge(input = {}) {
   const tool = input.tool_name || '';
@@ -40,7 +52,7 @@ export function judge(input = {}) {
     return null;
   }
   if (tool !== 'Bash') return null;
-  const cmd = String(ti.command || '');
+  const cmd = withoutHeredocs(ti.command || '');
   if (/(^|[\s;&|])keep\s+(import|set|run|redact|scan)\b/.test(cmd)) return null;
   // Writing TO a secret file (>> .env, > .env, tee .env) is not reading it: take the write targets out first.
   const reading = cmd.replace(/(\d?>>?|\btee(\s+-a)?)\s*['"]?[^\s'";|&)]+/g, ' ');
