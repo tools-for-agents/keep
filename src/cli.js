@@ -147,6 +147,7 @@ const commands = {
     ].join('\n'));
   },
   async mcp() { await import(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'mcp', 'mcp-server.js')); },
+  version() { out(JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version); },
   help() {
     out(`keep — use a secret without holding it
 
@@ -167,7 +168,7 @@ env: KEEP_HOME (vault dir, default ~/.keep) · KEEP_BACKEND (keychain | secret-t
   },
 };
 
-const fn = commands[cmd];
+const fn = commands[{ '--help': 'help', '-h': 'help', '--version': 'version' }[cmd] || cmd];
 if (!fn) { process.stderr.write(`keep: unknown command "${cmd}"\n\n`); commands.help(); process.exit(2); }
 Promise.resolve().then(fn).catch((e) => die(e.message));
 
