@@ -38,6 +38,10 @@ test('code is not a file, and a heredoc written to a file is data — but one fe
   assert.equal(bash('node -e "console.log(process.env.HOME)"'), null);
   assert.equal(bash("cat >> test/guard.test.js <<'EOF'\nassert.ok(bash('cat .env'))\nEOF"), null, 'a test ABOUT .env, being written, reads nothing');
   assert.ok(bash("python3 <<'EOF'\nprint(open('.env').read())\nEOF"), 'a heredoc run by an interpreter that opens .env is a read');
+  assert.ok(bash("node <<'EOF'\nconsole.log(require('fs').readFileSync('backend/.env','utf8'))\nEOF"));
+  assert.ok(bash("python3 - <<'EOF'\nimport subprocess\nsubprocess.run('cat .env', shell=True)\nEOF"), 'a cat inside a subprocess is a read');
+  // …and a string that only NAMES one is not (refused on the guard's second live day):
+  assert.equal(bash("python3 - <<'EOF'\ns = s.replace('run it', 'never cat a .env')\nEOF"), null);
 });
 
 test('the hook speaks Claude Code: JSON on stdin, a decision on stdout, silence when allowed', () => {

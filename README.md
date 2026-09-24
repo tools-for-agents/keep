@@ -123,7 +123,7 @@ Every file is 0600 in a 0700 directory, and each write goes to a temp file first
 ## Test
 
 ```bash
-node --test               # 28 tests; the file backend, no keychain touched
+node --test               # 29 tests; the file backend, no keychain touched
 node scripts/mutants.mjs  # breaks each safety property on purpose and demands the suite goes red
 ```
 

@@ -39,8 +39,29 @@ function secretIn(text) {
 // the command line around it is judged.
 // But a heredoc fed to an INTERPRETER (`python3 <<EOF … open('.env') … EOF`) is code being run, and
 // it stays: only a body headed for a file (`cat > f <<EOF`, `tee f <<EOF`) is skipped.
-export const withoutHeredocs = (cmd) => String(cmd).replace(/([^\n]*?)<<-?\s*(['"]?)(\w+)\2([^\n]*)\n[\s\S]*?\n\s*\3\s*(?=\n|$)/g,
-  (whole, before, _q, _tag, after) => (/\b(cat|tee)\b[^|;&]*>|\btee\b/.test(`${before} ${after}`) ? `${before} ${after}` : whole));
+//
+// And in code fed to an interpreter, only an actual READ counts. A python heredoc that edits a doc
+// saying "never cat a .env" names the file in a string and reads nothing — and was refused, on the
+// guard's second live day. open('.env'), readFileSync('.env'), load_dotenv(), a cat inside a
+// subprocess: those are reads, and they stay.
+// The file has to be what the read reads: inside the call's parentheses, the first argument of a
+// cat-like command, or an argument after the pattern of a grep-like one — not merely on the same line.
+const CALL_READ = /\b(?:open|readFile|readFileSync|read_text|read_bytes|load_dotenv|dotenv_values|fopen|File\.read|IO\.read)\s*\(([^)]*)/g;
+const CAT_READ = /(?:^|[\s;&|(`$'"])(?:cat|head|tail|less|more|base64|xxd|strings)\s+(?:-\S+\s+)*(\S+)/g;
+const GREP_READ = /(?:^|[\s;&|(`$'"])(?:grep|egrep|rg|sed|awk)\s+(?:-\S+\s+)*(?:'[^']*'|"[^"]*"|\S+)\s+((?:\S+\s*){1,3})/g;
+const heredocBody = (body) => {
+  const files = [];
+  for (const line of body.split('\n')) {
+    for (const re of [CALL_READ, CAT_READ, GREP_READ]) {
+      for (const m of line.matchAll(re)) files.push(...secretIn(` ${m[1]} `));
+    }
+  }
+  return files.length ? ` cat ${files.join(' ')} ` : ' ';
+};
+export const withoutHeredocs = (cmd) => String(cmd).replace(/([^\n]*?)<<-?\s*(['"]?)(\w+)\2([^\n]*)\n([\s\S]*?)\n\s*\3\s*(?=\n|$)/g,
+  (whole, before, _q, _tag, after, body) => (/\b(cat|tee)\b[^|;&]*>|\btee\b/.test(`${before} ${after}`)
+    ? `${before} ${after}`
+    : `${before} ${after}${heredocBody(body)}`));
 
 export function judge(input = {}) {
   const tool = input.tool_name || '';
