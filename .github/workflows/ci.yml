@@ -30,3 +30,28 @@ jobs:
           node-version: '24'
       - name: break it on purpose — every canary must die
         run: node scripts/mutants.mjs
+
+  # A STRANGER'S FIRST INSTALL: a fresh clone, no vault, no keychain — the file backend, exactly as
+  # a Linux box without secret-tool gets it. init → set → run → list, over the CLI and over MCP,
+  # and the value must not appear in a single byte of any output.
+  first-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: a new user's first five minutes
+        env:
+          KEEP_HOME: /tmp/fresh-keep
+        run: |
+          set -e
+          node src/cli.js init | tee /tmp/out.txt
+          grep -q "file" /tmp/out.txt || { echo "::error::the first init did not say where the key went"; exit 1; }
+          printf 'first-run-secret-value-42' | node src/cli.js set FIRST_KEY >> /tmp/out.txt
+          node src/cli.js run --with FIRST_KEY -- node -e 'console.log(process.env.FIRST_KEY)' >> /tmp/out.txt 2>&1
+          node src/cli.js list >> /tmp/out.txt
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"keep_run","arguments":{"command":["node","-e","console.log(process.env.FIRST_KEY)"],"with":["FIRST_KEY"]}}}' | node mcp/mcp-server.js >> /tmp/out.txt 2>&1
+          cat /tmp/out.txt
+          grep -q '‹keep:FIRST_KEY›' /tmp/out.txt || { echo "::error::the run never showed the redacted name"; exit 1; }
+          if grep -q 'first-run-secret-value-42' /tmp/out.txt; then echo "::error::THE VALUE LEAKED on a first run"; exit 1; fi

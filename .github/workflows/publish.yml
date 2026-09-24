@@ -1,0 +1,61 @@
+# Publish to npm, then to the official MCP registry.
+#
+# The registry hosts METADATA ONLY — the package has to exist on npm first, and
+# package.json's "mcpName" is the marker that proves we own the name in server.json.
+#
+# Auth: the registry uses GitHub OIDC, so there is no registry secret to store.
+# npm does need one: add NPM_TOKEN to the repo (or org) secrets.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+name: publish
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  id-token: write    # required for OIDC — this is what logs us into the registry
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: the name in package.json must match the one we claim in server.json
+        run: |
+          a=$(node -p "require('./package.json').mcpName")
+          b=$(node -p "require('./server.json').name")
+          test "$a" = "$b" || { echo "mcpName '$a' != server.json name '$b'"; exit 1; }
+
+      - run: npm test
+
+      # Idempotent on purpose: if the version is already on npm, SKIP publish and go straight to
+      # the registry. npm rejects a re-publish of an existing version with a hard error — so without
+      # this, a run that published to npm but then failed at the registry (a transient error, an OIDC
+      # hiccup) could never be retried: the re-run would die here, at npm, before ever reaching the
+      # registry step, leaving the package on npm and absent from the registry forever.
+      - name: publish to npm (skip if this exact version is already there)
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version is already on npm — skipping publish, continuing to the registry."
+          else
+            npm publish --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: install mcp-publisher
+        run: |
+          curl -sL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+
+      - run: ./mcp-publisher login github-oidc
+      - run: ./mcp-publisher publish
