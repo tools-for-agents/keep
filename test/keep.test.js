@@ -211,3 +211,27 @@ test('a request is answered by the secret arriving', () => {
   vault.set('STRIPE_KEY', 'sk_test_abcdefghijklmnop');
   assert.ok(!vault.status().requests.some((q) => q.name === 'STRIPE_KEY'));
 });
+
+test('redact: a filter other tools can pipe text through', () => {
+  const input = `said ${SECRET} and ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 and ${Buffer.from(`u:${OTHER}`).toString('base64')}`;
+  let r = spawnSync(process.execPath, [CLI, 'redact'], { input, encoding: 'utf8', env });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!r.stdout.includes(SECRET) && r.stdout.includes(mark('API_KEY')));
+  assert.ok(r.stdout.includes('ghp_ABCDEF'), 'a shape is left alone without --patterns');
+  r = spawnSync(process.execPath, [CLI, 'redact', '--patterns', '--count'], { input, encoding: 'utf8', env });
+  assert.ok(r.stdout.includes('‹keep:github›') && !r.stdout.includes('ghp_ABCDEF'));
+  assert.match(r.stderr, /3 redacted/);
+});
+
+test('redact --patterns takes a private key whole, not just its label', () => {
+  const body = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC03EoDMHbnkCiD';
+  for (const input of [
+    `x -----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY----- y`,
+    JSON.stringify({ env: `FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----\n"` }),
+    `cut off: -----BEGIN RSA PRIVATE KEY-----\n${body}`,
+  ]) {
+    const r = spawnSync(process.execPath, [CLI, 'redact', '--patterns'], { input, encoding: 'utf8', env });
+    assert.ok(!r.stdout.includes('MIIEvQ') && !r.stdout.includes('03EoDM'), `the key body survived: ${r.stdout}`);
+    assert.match(r.stdout, /‹keep:private-key›/);
+  }
+});

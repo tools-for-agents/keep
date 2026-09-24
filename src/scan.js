@@ -105,3 +105,15 @@ export function summarise(findings) {
   }
   return [...groups.values()].sort((a, b) => (a.kind === b.kind ? a.file.localeCompare(b.file) : a.kind === 'kept' ? -1 : 1));
 }
+
+// For `keep redact --patterns`: a key SHAPE has no name in the vault, so it becomes its kind.
+// A private key is a BLOCK: masking its BEGIN line and leaving the body would redact the label and
+// hand over the key. So the whole block goes — through END if it is there, and through the whole
+// run of base64 (with real or JSON-escaped newlines) if the text was cut off before it.
+const KEY_BLOCK = /-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|(?:\\n|\\r|\s|[A-Za-z0-9+/=])*)/g;
+export function redactPatterns(text) {
+  let count = 0;
+  let s = String(text).replace(KEY_BLOCK, () => { count++; return '‹keep:private-key›'; });
+  for (const [label, re] of PATTERNS) s = s.replace(re, () => { count++; return `‹keep:${label}›`; });
+  return { text: s, count };
+}

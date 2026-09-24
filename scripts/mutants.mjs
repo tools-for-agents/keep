@@ -71,6 +71,12 @@ const CANARIES = [
     find: '  if (v.length < MIN_LEN) throw',
     into: '  if (false) throw',
   },
+  {
+    why: 'a private key is redacted as a BLOCK — masking only its BEGIN line hands over the key body',
+    file: 'src/scan.js',
+    find: "  let s = String(text).replace(KEY_BLOCK, () => { count++; return '‹keep:private-key›'; });",
+    into: '  let s = String(text);',
+  },
 ];
 
 // spawnSync returns status:null when IT kills the child for exceeding the timeout — a TIMEOUT,

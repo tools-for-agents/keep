@@ -42,7 +42,10 @@ keep import .env                      # keep every KEY=value in a dotenv file (t
 keep list                             # names, policy, usage — and what agents have asked for
 keep audit                            # every use: when, which names, which command, exit code
 keep scan --transcripts               # has anything already leaked?
+keep redact --patterns < in > out     # a filter: kept values and known key shapes → their names
 ```
+
+`keep redact` is for the *other* tools that store what an agent wrote: a memory that dreams transcripts, a log shipper, a search index. [ghost](https://github.com/tools-for-agents/ghost) pipes every session through it before dreaming, so a key an agent once printed does not end up in long-term memory. With `--patterns` it also masks anything shaped like a well-known key, and it masks a private key as a whole block, body included, not just its `BEGIN` line.
 
 ## For the agent (MCP)
 
@@ -100,7 +103,7 @@ Every file is 0600 in a 0700 directory, and each write goes to a temp file first
 ## Test
 
 ```bash
-node --test               # 21 tests; the file backend, no keychain touched
+node --test               # 23 tests; the file backend, no keychain touched
 node scripts/mutants.mjs  # breaks each safety property on purpose and demands the suite goes red
 ```
 

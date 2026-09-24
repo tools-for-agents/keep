@@ -5,7 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as vault from './vault.js';
 import { run } from './run.js';
-import { scan, summarise, transcriptsDir } from './scan.js';
+import { scan, summarise, transcriptsDir, redactPatterns } from './scan.js';
+import { needles, redactText } from './redact.js';
 
 const argv = process.argv.slice(2);
 const dash = argv.indexOf('--');
@@ -94,6 +95,21 @@ const commands = {
     if (leaks) out(`\n${leaks} file${leaks === 1 ? '' : 's'} hold a kept secret. Rotate the secret — a leaked value stays leaked — then keep set the new one.`);
     if (leaks) process.exitCode = 3;
   },
+  // A filter: stdin → stdout with every kept value (and, with --patterns, every known key shape)
+  // replaced by its name. For other tools that store or forward text an agent produced — a memory
+  // that dreams transcripts, a log shipper — so a secret that slipped into a session stops there.
+  async redact() {
+    let text = '';
+    process.stdin.setEncoding('utf8');
+    for await (const c of process.stdin) text += c;
+    let values = {};
+    try { values = vault.status().initialised ? vault._values() : {}; } catch (e) { process.stderr.write(`keep: cannot open the vault (${e.message})\n`); }
+    let r = redactText(text, needles(values));
+    let n = r.count;
+    if (flags.patterns) { const p = redactPatterns(r.text); r = p; n += p.count; }
+    process.stdout.write(r.text);
+    if (flags.count) process.stderr.write(`keep: ${n} redacted\n`);
+  },
   request() {
     const n = args[0];
     if (!n) die('usage: keep request NAME ["why you need it"]');
@@ -127,6 +143,7 @@ const commands = {
   keep run [--with A,B] -- cmd args…          run with secrets injected as env vars; {{NAME}} in args
                                               is replaced; every kept value is redacted from output
   keep scan [paths…] [--transcripts]          find kept values (and known key shapes) that leaked
+  keep redact [--patterns] < in > out         a filter: kept values (and key shapes) → their names
   keep request NAME ["why"]                   an agent asks its person for a secret it lacks
   keep audit [--limit N]                      every use: names, command, exit — never values
   keep status · keep rm NAME · keep mcp       vitals · forget one · the MCP server (stdio)
