@@ -47,6 +47,26 @@ keep redact --patterns < in > out     # a filter: kept values and known key shap
 
 `keep redact` is for the *other* tools that store what an agent wrote: a memory that dreams transcripts, a log shipper, a search index. [ghost](https://github.com/tools-for-agents/ghost) pipes every session through it before dreaming, so a key an agent once printed does not end up in long-term memory. With `--patterns` it also masks anything shaped like a well-known key, and it masks a private key as a whole block, body included, not just its `BEGIN` line.
 
+## guard: an agent does not read a secret file
+
+keep lets an agent use a secret without holding it, but nothing stopped an agent from holding one
+anyway. The leak keep's first scan found was exactly that: an agent looking for a database URL ran
+`grep -n "…\|PG\|…" backend/.env`, the base64 body of a Firebase private key happened to contain
+"PG", and the key went into the transcript. There was no intent and no attack, just a grep.
+
+```bash
+keep guard --install      # a Claude Code PreToolUse hook (Bash|Read); keeps every other hook; backs settings up
+keep guard --uninstall
+```
+
+A command that **prints** a secret file (`cat`, `grep`, `head`, `sed`, `awk`, `git diff`, `base64 <`,
+`curl -d @.env`, and so on) or a `Read` of one (`.env*`, `*.pem`, `*.key`, `id_rsa`,
+`*service-account*.json`, `credentials.json`, `.netrc`, `.npmrc`, …) is refused. The refusal
+carries the way forward, which an agent can take on its own with no human awake:
+`keep import <file>` stores every value without printing one, and `keep run --with NAME -- …` uses
+it. Nothing that doesn't print a secret is touched: templates (`.env.example`), `cp .env.example .env`,
+`source .env && npm start`, writing to a secret file, `ls`, `mv`, and keep's own commands.
+
 ## For the agent (MCP)
 
 | Tool | What it does |
@@ -103,7 +123,7 @@ Every file is 0600 in a 0700 directory, and each write goes to a temp file first
 ## Test
 
 ```bash
-node --test               # 23 tests; the file backend, no keychain touched
+node --test               # 28 tests; the file backend, no keychain touched
 node scripts/mutants.mjs  # breaks each safety property on purpose and demands the suite goes red
 ```
 

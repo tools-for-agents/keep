@@ -24,6 +24,24 @@ import { spawnSync } from 'node:child_process';
 
 const CANARIES = [
   {
+    why: 'guard refuses a READ of a secret file — the grep that put a Firebase private key into a transcript',
+    file: 'src/guard.js',
+    find: '  return deny(files[0], files[0]);',
+    into: '  return null;',
+  },
+  {
+    why: 'guard leaves templates alone — cat .env.example is how a project is set up, not a leak',
+    file: 'src/guard.js',
+    find: '    if (!TEMPLATE.test(f)) out.push(f);',
+    into: '    out.push(f);',
+  },
+  {
+    why: 'guard --install keeps everyone else\'s hooks — it replaces only its own',
+    file: 'src/cli.js',
+    find: '  const kept = list.filter((h) => !ours(h));',
+    into: '  const kept = [];',
+  },
+  {
     why: 'base64 is searched at ALL THREE byte alignments — at one, a Basic auth header ("user:" + secret) walks the secret straight out',
     file: 'src/redact.js',
     find: '  for (let k = 0; k < 3; k++) {',

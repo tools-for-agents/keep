@@ -7,6 +7,8 @@ import * as vault from './vault.js';
 import { run } from './run.js';
 import { scan, summarise, transcriptsDir, redactPatterns } from './scan.js';
 import { needles, redactText } from './redact.js';
+import { judge } from './guard.js';
+import os from 'node:os';
 
 const argv = process.argv.slice(2);
 const dash = argv.indexOf('--');
@@ -110,6 +112,18 @@ const commands = {
     process.stdout.write(r.text);
     if (flags.count) process.stderr.write(`keep: ${n} redacted\n`);
   },
+  // A Claude Code PreToolUse hook: refuse reading a secret file, and say what to do instead.
+  // `keep guard --install` wires it into ~/.claude/settings.json; `--uninstall` takes it out.
+  async guard() {
+    if (flags.install || flags.uninstall) return out(installGuard(!!flags.uninstall));
+    let raw = '';
+    process.stdin.setEncoding('utf8');
+    for await (const c of process.stdin) raw += c;
+    let input = {};
+    try { input = JSON.parse(raw); } catch { return; }
+    const d = judge(input);
+    if (d) out(JSON.stringify(d));
+  },
   request() {
     const n = args[0];
     if (!n) die('usage: keep request NAME ["why you need it"]');
@@ -144,6 +158,7 @@ const commands = {
                                               is replaced; every kept value is redacted from output
   keep scan [paths…] [--transcripts]          find kept values (and known key shapes) that leaked
   keep redact [--patterns] < in > out         a filter: kept values (and key shapes) → their names
+  keep guard [--install|--uninstall]          a Claude Code hook: refuse an agent READING a secret file (.env, *.pem…)
   keep request NAME ["why"]                   an agent asks its person for a secret it lacks
   keep audit [--limit N]                      every use: names, command, exit — never values
   keep status · keep rm NAME · keep mcp       vitals · forget one · the MCP server (stdio)
@@ -193,4 +208,23 @@ function readSecret(prompt) {
     };
     stdin.on('data', onData);
   });
+}
+
+// settings.json surgery: add or remove ONLY our hook, keep everyone else's, back the file up first.
+function installGuard(remove) {
+  const file = process.env.KEEP_CLAUDE_SETTINGS || path.join(os.homedir(), '.claude', 'settings.json');
+  let cfg = {};
+  try { cfg = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* new file */ }
+  const cmd = `node "${path.join(path.dirname(fileURLToPath(import.meta.url)), 'cli.js')}" guard`;
+  cfg.hooks ||= {};
+  const list = (cfg.hooks.PreToolUse ||= []);
+  const ours = (h) => (h.hooks || []).some((x) => /keep[\\/]src[\\/]cli\.js"? guard|(^|\s)keep guard$/.test(x.command || ''));
+  const kept = list.filter((h) => !ours(h));
+  if (!remove) kept.push({ matcher: 'Bash|Read', hooks: [{ type: 'command', command: cmd }] });
+  cfg.hooks.PreToolUse = kept;
+  if (!kept.length) delete cfg.hooks.PreToolUse;
+  if (fs.existsSync(file)) fs.copyFileSync(file, `${file}.keep-bak`);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(cfg, null, 2)}\n`);
+  return remove ? `keep guard removed from ${file}` : `keep guard installed in ${file} (PreToolUse: Bash|Read) — a backup is at ${file}.keep-bak`;
 }
