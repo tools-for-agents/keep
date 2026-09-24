@@ -85,7 +85,10 @@ export function judge(input = {}) {
   // …and the reader is the segment's COMMAND, not a word somewhere in its arguments: a commit message
   // that quotes `grep … backend/.env` is git, not grep (refused on the guard's third live day).
   // (git's diff/show/blame/grep/log -p print the content of the files they are given.)
-  const reads = (seg) => READERS.test(` ${commandWord(seg)} `) || /<\s*['"]?[^\s'"]*/.test(seg)
+  // An input redirection counts only when what follows `<` IS a secret file — not any `<` at all, which
+  // matched the `<noreply@…>` at the end of every commit message this machine writes.
+  const redirectsIn = (seg) => [...seg.matchAll(/(?:^|[^<])<(?!<)\s*(['"]?)([^\s'"<>]+)\1/g)].some((m) => secretIn(` ${m[2]} `).length);
+  const reads = (seg) => READERS.test(` ${commandWord(seg)} `) || redirectsIn(seg)
     || (commandWord(seg) === 'git' && /^\s*(?:[A-Za-z_]\w*=\S*\s+)*(?:(?:sudo|env)\s+)*(?:\S*\/)?git\s+(?:-\S+\s+)*(diff|show|blame|grep|log|cat-file)\b/.test(seg));
   const files = segments.filter((seg) => secretIn(seg).length && reads(seg)).flatMap((seg) => secretIn(seg));
   if (!files.length) return null;

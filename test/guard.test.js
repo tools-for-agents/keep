@@ -47,6 +47,8 @@ test('code is not a file, and a heredoc written to a file is data — but one fe
   assert.ok(bash("grep TOKEN ~/.npmrc | wc -l"), 'and grep reading it inside a pipeline is');
   assert.equal(bash('git commit -m "the leak was grep \\"PG\\" backend/.env"'), null, 'a message that quotes a read is not a read');
   assert.equal(bash('git commit -m "git diff/show print a file, ls ~/.npmrc lists it"'), null, 'nor a message that mentions git diff');
+  assert.equal(bash('git commit -m "about backend/.env\n\nCo-Authored-By: Vefa <noreply@example.com>"'), null, 'a `<` in an email address is not a redirection');
+  assert.ok(bash('wc -c < .env'), 'but a real input redirection from a secret file is a read');
   assert.ok(bash('sudo cat /etc/app/.env'), 'a wrapper does not hide the reader');
   assert.ok(bash('FOO=1 /usr/bin/head -3 .env'), 'nor an assignment or a full path');
   // …and a string that only NAMES one is not (refused on the guard's second live day):
