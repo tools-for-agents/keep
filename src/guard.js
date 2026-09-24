@@ -77,11 +77,44 @@ export function judge(input = {}) {
   if (/(^|[\s;&|])keep\s+(import|set|run|redact|scan)\b/.test(cmd)) return null;
   // Writing TO a secret file (>> .env, > .env, tee .env) is not reading it: take the write targets out first.
   const reading = cmd.replace(/(\d?>>?|\btee(\s+-a)?)\s*['"]?[^\s'";|&)]+/g, ' ');
-  const files = secretIn(reading);
+  if (!secretIn(reading).length) return null;
+  // It must READ the file — and the reader and the file must be in the SAME command of a pipeline.
+  // `ls -la ~/.npmrc | awk '{print $5}'` names the file in `ls` (which lists it) and reads a pipe in
+  // `awk`; judged as one string it looked like "awk reads .npmrc" and was refused.
+  const segments = splitCommands(reading);
+  // …and the reader is the segment's COMMAND, not a word somewhere in its arguments: a commit message
+  // that quotes `grep … backend/.env` is git, not grep (refused on the guard's third live day).
+  // (git's diff/show/blame/grep/log -p print the content of the files they are given.)
+  const reads = (seg) => READERS.test(` ${commandWord(seg)} `) || /<\s*['"]?[^\s'"]*/.test(seg)
+    || (commandWord(seg) === 'git' && /^\s*(?:[A-Za-z_]\w*=\S*\s+)*(?:(?:sudo|env)\s+)*(?:\S*\/)?git\s+(?:-\S+\s+)*(diff|show|blame|grep|log|cat-file)\b/.test(seg));
+  const files = segments.filter((seg) => secretIn(seg).length && reads(seg)).flatMap((seg) => secretIn(seg));
   if (!files.length) return null;
-  // It must READ the file: a reader in the command, or an input redirection from it.
-  if (!READERS.test(reading) && !/<\s*['"]?[^\s'"]*/.test(reading)) return null;
   return deny(files[0], files[0]);
+}
+
+// The word a segment runs: past VAR=value assignments and the wrappers that run another command.
+export function commandWord(seg) {
+  const words = String(seg).trim().split(/\s+/);
+  let i = 0;
+  while (i < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]) || /^(sudo|env|time|nice|nohup|command|exec|xargs|builtin)$/.test(words[i]) || (/^-/.test(words[i]) && i > 0))) i++;
+  return (words[i] || '').replace(/^.*\//, '');
+}
+
+// Split a command line on | || && ; & and newlines — but never inside quotes: the leak this guard
+// exists for was `grep -n "DATABASE_URL\|PG\|pg_" backend/.env`, whose pattern is full of pipes.
+export function splitCommands(cmd) {
+  const out = [];
+  let cur = '', q = null;
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i];
+    if (q) { cur += c; if (c === '\\' && q === '"') { cur += cmd[++i] || ''; } else if (c === q) q = null; continue; }
+    if (c === "'" || c === '"') { q = c; cur += c; continue; }
+    if (c === '\\') { cur += c + (cmd[++i] || ''); continue; }
+    if (c === '|' || c === ';' || c === '&' || c === '\n') { out.push(cur); cur = ''; if (cmd[i + 1] === c) i++; continue; }
+    cur += c;
+  }
+  out.push(cur);
+  return out;
 }
 
 function deny(name, full) {

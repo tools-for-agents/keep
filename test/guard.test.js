@@ -40,6 +40,15 @@ test('code is not a file, and a heredoc written to a file is data — but one fe
   assert.ok(bash("python3 <<'EOF'\nprint(open('.env').read())\nEOF"), 'a heredoc run by an interpreter that opens .env is a read');
   assert.ok(bash("node <<'EOF'\nconsole.log(require('fs').readFileSync('backend/.env','utf8'))\nEOF"));
   assert.ok(bash("python3 - <<'EOF'\nimport subprocess\nsubprocess.run('cat .env', shell=True)\nEOF"), 'a cat inside a subprocess is a read');
+  // A reader elsewhere in the pipeline is not reading the file named in another command:
+  assert.equal(bash("ls -la ~/.npmrc | awk '{print $5}'"), null);
+  assert.equal(bash('test -f .env && grep -c x package.json'), null);
+  assert.ok(bash('cat package.json && cat .env'), 'but a reader in its own command is');
+  assert.ok(bash("grep TOKEN ~/.npmrc | wc -l"), 'and grep reading it inside a pipeline is');
+  assert.equal(bash('git commit -m "the leak was grep \\"PG\\" backend/.env"'), null, 'a message that quotes a read is not a read');
+  assert.equal(bash('git commit -m "git diff/show print a file, ls ~/.npmrc lists it"'), null, 'nor a message that mentions git diff');
+  assert.ok(bash('sudo cat /etc/app/.env'), 'a wrapper does not hide the reader');
+  assert.ok(bash('FOO=1 /usr/bin/head -3 .env'), 'nor an assignment or a full path');
   // …and a string that only NAMES one is not (refused on the guard's second live day):
   assert.equal(bash("python3 - <<'EOF'\ns = s.replace('run it', 'never cat a .env')\nEOF"), null);
 });
