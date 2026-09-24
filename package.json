@@ -1,0 +1,33 @@
+{
+  "name": "@tools-for-agents/keep",
+  "version": "0.1.0",
+  "description": "Use a secret without holding it: an encrypted vault whose values are injected into the commands an agent runs and redacted from everything that comes back.",
+  "type": "module",
+  "bin": {
+    "keep": "src/cli.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "mcp": "node mcp/mcp-server.js",
+    "test": "node --test"
+  },
+  "license": "MIT",
+  "mcpName": "io.github.tools-for-agents/keep",
+  "files": [
+    "src",
+    "mcp",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tools-for-agents/keep.git"
+  },
+  "homepage": "https://tools-for-agents.github.io",
+  "keywords": ["mcp", "mcp-server", "ai-agents", "agent-tools", "claude", "llm", "zero-dependency", "secrets", "redaction", "keep"],
+  "publishConfig": {
+    "access": "public"
+  }
+}

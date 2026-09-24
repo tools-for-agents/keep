@@ -1,0 +1,27 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.tools-for-agents/keep",
+  "description": "Use a secret without holding it: injected into the command, redacted from the output.",
+  "version": "0.1.0",
+  "websiteUrl": "https://tools-for-agents.github.io",
+  "repository": {
+    "url": "https://github.com/tools-for-agents/keep",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@tools-for-agents/keep",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ]
+    }
+  ]
+}

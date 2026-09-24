@@ -1,0 +1,32 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      # In CI a skipped test is a failed test: everything keep needs is here.
+      - name: run the tests — and none of them may be skipped
+        run: |
+          node --test 2>&1 | tee "$RUNNER_TEMP/test.txt"
+          code=${PIPESTATUS[0]}
+          test "$code" -eq 0 || exit $code
+          n=$(grep -oE '^# skipped [0-9]+|^. skipped [0-9]+' "$RUNNER_TEMP/test.txt" | grep -oE '[0-9]+$' | head -1)
+          if [ "${n:-0}" -ne 0 ]; then echo "::error::${n} test(s) skipped in CI"; exit 1; fi
+
+  # keep's promises are safety properties. Break each one on purpose; the suite must go red.
+  mutants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: break it on purpose — every canary must die
+        run: node scripts/mutants.mjs
