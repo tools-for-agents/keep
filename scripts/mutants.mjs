@@ -32,8 +32,8 @@ const CANARIES = [
   {
     why: 'guard leaves templates alone — cat .env.example is how a project is set up, not a leak',
     file: 'src/guard.js',
-    find: '    if (!TEMPLATE.test(f)) out.push(f);',
-    into: '    out.push(f);',
+    find: '    if (!TEMPLATE.test(f) && !CODE_NOT_FILE.test(f)) out.push(f);',
+    into: '    if (!CODE_NOT_FILE.test(f)) out.push(f);',
   },
   {
     why: 'guard --install keeps everyone else\'s hooks — it replaces only its own',
